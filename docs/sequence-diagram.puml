@@ -1,0 +1,75 @@
+@startuml
+title Loan Application API Flow — PT. XYZ
+
+actor "User" as user
+participant "Mobile App" as app
+participant "API Gateway" as gw
+participant "Loan Service" as loan
+participant "Scoring Service" as scoring
+participant "Notification Service" as notif
+database "Database" as db
+
+user -> app : Isi form pinjaman\n(nominal + tenor)
+app -> gw : POST /loans/apply\nAuthorization: Bearer JWT
+activate gw
+gw -> gw : Validasi JWT token\n+ Rate limit check
+gw -> loan : Route request
+activate loan
+
+loan -> db : SELECT active loan\nWHERE user_id = ? AND status IN\n('PENDING','ACTIVE')
+activate db
+db --> loan : Query result
+deactivate db
+
+alt Active loan ditemukan
+  loan --> gw : 400 Bad Request\n{ error: "Already has active loan" }
+  gw --> app : Error response
+  app --> user : Tampil pesan error
+else Tidak ada active loan
+  loan -> db : INSERT loan_applications\nstatus = PENDING
+  activate db
+  db --> loan : loan_id
+  deactivate db
+
+  loan -> scoring : callScoring(userId, amount, tenor)
+  activate scoring
+  scoring -> scoring : BI Checking API\n+ Credit Score calculation\n+ Debt-to-income ratio
+  scoring --> loan : { credit_score, is_approved,\nrejection_reason }
+  deactivate scoring
+
+  loan -> db : INSERT scoring_results
+  activate db
+  db --> loan : OK
+  deactivate db
+
+  alt Pinjaman Disetujui
+    loan -> db : UPDATE loan_applications\nstatus = APPROVED\n+ INSERT loan_schedules
+    activate db
+    db --> loan : OK
+    deactivate db
+    loan -> notif : publish loan_approved_event\n{ userId, amount, schedules }
+    activate notif
+    notif -> user : Kirim Email notifikasi\n(detail pinjaman + jadwal cicilan)
+    notif -> user : Kirim SMS notifikasi
+    deactivate notif
+    loan --> gw : 201 Created\n{ loan_id, schedules, status: APPROVED }
+    gw --> app : Response success
+    app --> user : Tampil status Disetujui\n+ jadwal cicilan
+  else Pinjaman Ditolak
+    loan -> db : UPDATE loan_applications\nstatus = REJECTED
+    activate db
+    db --> loan : OK
+    deactivate db
+    loan -> notif : publish loan_rejected_event\n{ userId, reason }
+    activate notif
+    notif -> user : Kirim Email penolakan\n(beserta alasan)
+    deactivate notif
+    loan --> gw : 200 OK\n{ status: REJECTED, reason }
+    gw --> app : Response rejected
+    app --> user : Tampil alasan penolakan
+  end
+end
+
+deactivate loan
+deactivate gw
+@enduml

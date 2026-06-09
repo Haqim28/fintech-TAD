@@ -1,0 +1,99 @@
+@startuml
+title Entity Relationship Diagram — PT. XYZ Loan App
+
+entity "USERS" as users {
+  * id : uuid <<PK>>
+  --
+  full_name : varchar(100)
+  email : varchar(100)
+  phone_number : varchar(20)
+  password_hash : varchar(255)
+  ktp_number : varchar(20)
+  photo_url : varchar(255)
+  ktp_photo_url : varchar(255)
+  status : enum(PENDING, ACTIVE, SUSPENDED)
+  created_at : timestamp
+  updated_at : timestamp
+}
+
+entity "BIOMETRIC_TOKENS" as bio {
+  * id : uuid <<PK>>
+  --
+  * user_id : uuid <<FK>>
+  device_id : varchar(100)
+  token_hash : varchar(255)
+  is_active : boolean
+  created_at : timestamp
+}
+
+entity "LOAN_APPLICATIONS" as loans {
+  * id : uuid <<PK>>
+  --
+  * user_id : uuid <<FK>>
+  requested_amount : decimal(15,2)
+  tenor_months : int
+  approved_amount : decimal(15,2)
+  interest_rate : decimal(5,2)
+  status : enum(PENDING, APPROVED, REJECTED, ACTIVE, COMPLETED)
+  rejection_reason : text
+  applied_at : timestamp
+  processed_at : timestamp
+}
+
+entity "SCORING_RESULTS" as scoring {
+  * id : uuid <<PK>>
+  --
+  * loan_id : uuid <<FK>>
+  credit_score : int
+  bi_checking_result : varchar(50)
+  debt_to_income : decimal(5,2)
+  is_approved : boolean
+  notes : text
+  scored_at : timestamp
+}
+
+entity "LOAN_SCHEDULES" as schedules {
+  * id : uuid <<PK>>
+  --
+  * loan_id : uuid <<FK>>
+  installment_number : int
+  due_date : date
+  principal_amount : decimal(15,2)
+  interest_amount : decimal(15,2)
+  total_amount : decimal(15,2)
+  remaining_balance : decimal(15,2)
+  status : enum(PENDING, PAID, OVERDUE)
+}
+
+entity "PAYMENTS" as payments {
+  * id : uuid <<PK>>
+  --
+  * loan_id : uuid <<FK>>
+  * schedule_id : uuid <<FK>>
+  amount_paid : decimal(15,2)
+  payment_method : varchar(50)
+  transaction_ref : varchar(100)
+  paid_at : timestamp
+  status : enum(SUCCESS, FAILED, PENDING)
+}
+
+entity "NOTIFICATIONS" as notif {
+  * id : uuid <<PK>>
+  --
+  * user_id : uuid <<FK>>
+  channel : enum(EMAIL, SMS, PUSH)
+  subject : varchar(200)
+  body : text
+  is_sent : boolean
+  sent_at : timestamp
+}
+
+users ||--o{ bio : "memiliki"
+users ||--o{ loans : "mengajukan"
+users ||--o{ notif : "menerima"
+loans ||--|| scoring : "dinilai oleh"
+loans ||--o{ schedules : "memiliki"
+loans ||--o{ payments : "dibayar melalui"
+schedules ||--o{ payments : "dilunasi oleh"
+
+@enduml
